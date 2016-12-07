@@ -1,0 +1,96 @@
+## Local Functions:
+# New functionality (11/15):
+# -a and -A options reversed
+# -p uses push
+# uses ./.gocmds if it exists
+# rearranged a bit
+function go {
+    local -a arg
+    local -a dir
+    local -a GoCmds
+    local -i idx=0
+    GoCmds="$HOME/.gocmds"
+    if [ -f ./.gocmds ]; then
+        GoCmds=./.gocmds
+    elif [ ! -f "$GoCmds" ]; then
+	# load some defaults
+        cat > "$GoCmds" <<EOF
+bin ~/bin
+down ~/Downloads
+proj ~/projects
+src ~/src
+EOF
+    fi
+    sort "$HOME/.gocmds" > "$HOME/.gocmdsort"
+    while read cmd todir
+    do
+	arg[$idx]="$cmd"
+	dir[$idx]="$todir"
+	let idx++
+    done < "$HOME/.gocmdsort"
+    if [ $# = 0 ]; then
+	echo 'Usage: go [key] where key is one of:'
+        idx=0
+        while [ "x${arg[$idx]}" != "x" ]
+	do
+	  ToPath=${dir[$idx]#$HOME}
+	  if [ $ToPath != ${dir[$idx]} ]; then
+	      ToPath="~$ToPath"
+	  fi
+	  echo "    ${arg[$idx]} = cd $ToPath"
+	  let idx++
+	done
+        cat <<EOF2
+ -or-
+    go -a [key]              (add a new shortcut to current directory)
+    go -A [key] [directory]  (add a new shortcut)
+    go -d [key]              (delete a shortcut)
+    go -p [key]              (use pushd instead of cd)
+    go -p                    (call popd)
+EOF2
+	return
+    fi
+
+    if [ "$1" = "-a" -a $# = 2 ]; then
+	echo "Appending $2 shortcut to gocmds."
+	echo "$2 $(pwd)" >> "$HOME/.gocmds"
+	return
+    elif [ "$1" = "-A" -a $# = 3 ]; then
+	echo "Appending $2 shortcut to gocmds."
+	echo "$2 $3" >> "$HOME/.gocmds"
+	return
+    elif [ "$1" = "-d" -a $# = 2 ]; then
+        echo "Deleting $2 shortcut from gocmds."
+        egrep -v "^$2 " "$HOME/.gocmds" | sort > "$HOME/.gocmdsort"
+        mv "$HOME/.gocmdsort" "$HOME/.gocmds"
+        return
+    elif [ "$1" = "-p" ]; then
+        if [ $# = 1 ]; then
+            echo "Pop back..."
+            popd
+            return
+        fi
+        CDCMD=pushd
+        shift
+    else
+        CDCMD=cd
+    fi
+
+    # lookup key in list of shortcuts
+    idx=0
+    while [ "x${arg[$idx]}" != "x" ]
+    do
+      if [ "$1" = "${arg[$idx]}" ]; then
+        echo "$CDCMD ${dir[$idx]}"
+        ## expand path (tildes, env vars, etc.)
+        cdDir="${dir[$idx]}"
+        $CDCMD "$(eval echo $cdDir)"
+        return
+      fi
+      let idx++
+    done
+
+    # if we fall thru to here, then key was not recognized.
+    echo "ERROR: Type 'go' without any parameter for usage."
+}
+alias pgo='go -p'
